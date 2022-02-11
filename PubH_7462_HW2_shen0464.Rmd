@@ -1,0 +1,199 @@
+---
+title: "PubH_7462_HW2_Shen0464"
+author: "You Shan Shen"
+date: "2022/2/6"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(echo = TRUE, warning = FALSE,results = 'hide' ,
+root.dir = rprojroot::find_rstudio_root_file())
+library(tidyverse)
+
+theme_set(theme(plot.title = element_text(hjust = 0.5), legend.position = "right"))
+```
+
+3.1 Data Exploration & Cleaning (10pts)
+
+```{r pressure, echo=FALSE}
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+brfss_smart_df <- 
+  read.csv("./data/brfss_smart_2010.csv") %>%
+  as_tibble() %>% 
+  janitor::clean_names() %>% 
+  filter(topic %in% 'Overall Health') %>%
+  dplyr::select(
+  year, response, locationdesc, sample_size, data_value
+  ) %>%
+  separate(locationdesc, sep = " - ", into = c("state", "county")) %>%
+  rename( 
+    'prop. of responses' = data_value, 
+    'sample size'= sample_size) %>%
+  mutate( year = as.numeric(year),
+          state = factor(state),
+         response = as.factor(response),
+         county= as.character(county)) 
+
+```
+
+
+
+3.2 Data Description (10pts)
+```{r}
+number_row <- brfss_smart_df %>% nrow()
+number_col <- brfss_smart_df %>% ncol()
+year_level <- length(unique(brfss_smart_df$year))
+response_level <- length(unique(brfss_smart_df$response))
+number_state <- length(unique(brfss_smart_df$state))
+number_county <- length(unique(brfss_smart_df$county))
+```
+ 
+2002-2010. BRFSS SMART County Prevalence contains `r number_row` observations and `r number_col` variables. Each observation is defined as a data about a U.S. resident regarding their health-related risk behaviors, chronic health conditions, and use of preventive services.
+
+The definition of variables in 3.1:
+
+Year: The survey conduct in `r year_level` different numbers of year.
+
+Response: There are `r response_level` levels response from an observation.
+
+State: Observations are from `r number_state` different states in US.
+
+County: Observations are from `r number_state` different counties in US.
+
+Sample size: the number of sample from a specific year, response, state, and county.
+
+Proportion of response: the proportion of sample from a specific level of response according to year, state, and county in percentage.
+
+
+
+3.3 Do Data Science (50pts)
+3.3.1 In the year 2004, which states were observed at 6 locations? (10pts)
+```{r}
+library(gt)
+
+brfss_smart_df %>% 
+  filter(year %in% '2004') %>% 
+  dplyr::select( state, county ) %>%
+  group_by( state) %>% 
+  distinct( county , .keep_all = TRUE) %>%
+  summarize(n = n() ) %>%
+  filter(n == 6) %>%
+  gt()
+
+```
+
+
+
+3.3.2 Make a “spaghetti plot” that shows the number of observed locations in each state from
+2002 to 2010. Which state has the highest mean number of locations over this period? (10pts)
+
+```{r}
+library(ggplot2)
+library(viridis)
+library(forcats)
+
+brfss_smart_spa <- brfss_smart_df %>%
+  group_by(state, year) %>%
+  distinct(state, year, county) %>%
+  summarize(number = n() ) 
+
+brfss_smart_spa$state1 <- fct_reorder(brfss_smart_spa$state,brfss_smart_spa$number,mean ,  na.rm = TRUE, .desc = TRUE)
+levels(brfss_smart_spa$state1)
+
+brfss_smart_spaggplot <- brfss_smart_spa  %>%
+   ggplot(aes(x = year, y = number, colour = state1)) +
+   geom_line(aes(group = state)) +
+   scale_color_viridis_d( "State" )
+
+brfss_smart_spaggplot
+ggsave("./figures/brfss_smart_spaggplot.png", brfss_smart_spaggplot)
+```
+
+
+
+3.3.3 Make a table showing, for the years 2002, 2006, and 2010, the mean and standard
+deviation of sample size and proportion of Excellent, Good, and Poor responses across locations
+in MN. (15pts)
+
+```{r}
+library(gt)
+MN_brfss_smart <- 
+  brfss_smart_df %>%
+  filter(state %in% 'MN') %>%
+  filter(year %in% c('2002', '2006', '2010')) %>%
+  filter(response %in% c('Excellent', 'Good', 'Poor')) %>%
+  dplyr::select( year, response, `sample size`, `prop. of responses` )
+
+
+  summary_MN_brfss_smart <-
+  MN_brfss_smart %>%
+  group_by(year, response) %>%
+  summarise( across(c(`sample size`, `prop. of responses`),
+                    list(mean = mean, sd = sd),
+                    na.rm = TRUE, 
+                    .names = "{.col}_{.fn}"))
+   
+  summary_MN_brfss_smart %>%
+    mutate(across(where(is.numeric), round, 3)) %>%
+   gt() %>%
+  tab_header("Mean and SD of Sample Size, Prop. Response from 2002, 2006,and 2010 in MN ") 
+ 
+
+```
+
+3.3.4 Create a ggplot that communicates the results/trends from the table above and stands
+on its own (15pts)
+
+```{r}
+library(stringr)
+
+tidy_brfss_smart <-
+summary_MN_brfss_smart %>%
+pivot_longer(cols = starts_with("sample"),
+names_to = "sample_size_type", 
+values_to = "sample_values") %>%
+mutate(
+sample_size_type = stringr::str_remove(sample_size_type, "sample size_") %>%
+str_to_upper() %>% 
+as.factor()
+) %>%
+pivot_longer(cols = starts_with("prop."), 
+names_to = "prop._type",
+values_to = "prop_values") %>%
+mutate(
+prop._type = stringr::str_remove(prop._type, "prop. of responses_") %>%
+str_to_upper() %>% 
+as.factor())
+
+
+
+base.gg <- 
+  tidy_brfss_smart %>%
+  mutate(year= as.factor(year)) 
+
+year_ggplot <-  base.gg %>%
+ggplot(aes(x = year, y = `sample_values`, colour = response, fill = response))+
+geom_col()  +
+ggtitle( "Mean of Sample Size for Response from 2002, 2006,and 2010 in MN" ) +
+xlab( "Year" ) + 
+ylab( "Mean of Sample Size Values" )
+
+year_ggplot
+
+response_type_ggplot <-
+  year_ggplot  + 
+  facet_wrap(~ response, scales = "free_x") +
+ggtitle( "Mean of Sample Size for Response from 2002, 2006,and 2010 in MN" ) +
+xlab( "Year" ) + 
+ylab( " Mean of Sample Size Values" )
+
+response_type_ggplot
+
+dir.create("./figures", showWarnings = FALSE)
+ggsave("./figures/year_ggplot.png", year_ggplot)
+ggsave("./figures/response_type_ggplot.png", response_type_ggplot)
+
+```

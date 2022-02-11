@@ -2,11 +2,11 @@
 title: "PubH_7462_HW2_Shen0464"
 author: "You Shan Shen"
 date: "2022/2/6"
-output: html_document
+output: github_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_knit$set(echo = TRUE, warning = FALSE,results = 'hide' ,
+```{r Setup,include = FALSE}
+knitr::opts_knit$set(echo = TRUE, warning = FALSE, results = "hide", error=FALSE, message=FALSE,include=FALSE,
 root.dir = rprojroot::find_rstudio_root_file())
 library(tidyverse)
 
